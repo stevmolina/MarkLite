@@ -605,10 +605,16 @@ body {
   color: var(--text-primary);
 }
 
-.markdown-body ul,
+.markdown-body ul {
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+  list-style-type: disc;
+}
+
 .markdown-body ol {
   padding-left: 1.5rem;
   margin-bottom: 1rem;
+  list-style-type: decimal;
 }
 
 .markdown-body li {

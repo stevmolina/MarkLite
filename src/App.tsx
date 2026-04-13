@@ -71,6 +71,9 @@ function AppContent() {
   // Project directory — drives file explorer root independently of current file
   const [projectDir, setProjectDir] = useState<string | null>(null);
 
+  // Zen mode — hides title bar, status bar, mode toggle, and panels
+  const [zenMode, setZenMode] = useState(false);
+
   // Export HTML content ref - captures from visible preview
   const previewRef = useRef<HTMLDivElement>(null);
 
@@ -313,6 +316,19 @@ function AppContent() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // F11 - Toggle zen mode
+      if (e.key === "F11") {
+        e.preventDefault();
+        setZenMode((prev) => {
+          if (!prev) {
+            // Entering zen mode — close panels
+            setShowFileExplorer(false);
+            setShowTOC(false);
+          }
+          return !prev;
+        });
+        return;
+      }
       // Ctrl+Shift+E - Toggle file explorer (check before Ctrl+E)
       if (e.ctrlKey && e.shiftKey && e.key === "E") {
         e.preventDefault();
@@ -410,14 +426,16 @@ function AppContent() {
 
   return (
     <div className="h-screen flex flex-col bg-[var(--bg-primary)] overflow-hidden transition-colors">
-      <TitleBar
-        fileName={fileName ?? undefined}
-        isDirty={isDirty}
-        filePath={filePath ?? undefined}
-        onOpenFile={handleOpenFile}
-        onSaveFile={handleSaveFile}
-        getExportHtml={getExportHtml}
-      />
+      {!zenMode && (
+        <TitleBar
+          fileName={fileName ?? undefined}
+          isDirty={isDirty}
+          filePath={filePath ?? undefined}
+          onOpenFile={handleOpenFile}
+          onSaveFile={handleSaveFile}
+          getExportHtml={getExportHtml}
+        />
+      )}
 
       {!hasFile ? (
         <WelcomeScreen
@@ -456,37 +474,43 @@ function AppContent() {
             />
           </div>
 
-          <ModeToggle mode={mode} onToggle={handleToggleMode} />
+          {!zenMode && <ModeToggle mode={mode} onToggle={handleToggleMode} />}
 
           {/* Sidebar Panels — TOC only shows with a file */}
-          <TableOfContents
-            isOpen={showTOC}
-            content={content}
-            onClose={closeAllPanels}
-          />
+          {!zenMode && (
+            <TableOfContents
+              isOpen={showTOC}
+              content={content}
+              onClose={closeAllPanels}
+            />
+          )}
 
-<StatusBar
-            isSaved={!isDirty}
-            lineNumber={mode === "preview" ? previewLine : cursorPosition.line}
-            columnNumber={cursorPosition.col}
-            mode={mode}
-            showFileExplorer={showFileExplorer}
-            showTOC={showTOC}
-            onToggleFileExplorer={handleToggleFileExplorer}
-            onToggleTOC={handleToggleTOC}
-            wordCount={wordCount}
-          />
+          {!zenMode && (
+            <StatusBar
+              isSaved={!isDirty}
+              lineNumber={mode === "preview" ? previewLine : cursorPosition.line}
+              columnNumber={cursorPosition.col}
+              mode={mode}
+              showFileExplorer={showFileExplorer}
+              showTOC={showTOC}
+              onToggleFileExplorer={handleToggleFileExplorer}
+              onToggleTOC={handleToggleTOC}
+              wordCount={wordCount}
+            />
+          )}
         </>
       )}
 
       {/* File Explorer — available globally (with file or project dir) */}
-      <FileExplorer
-        isOpen={showFileExplorer}
-        currentFilePath={filePath}
-        projectDir={projectDir}
-        onFileSelect={loadFile}
-        onClose={closeAllPanels}
-      />
+      {!zenMode && (
+        <FileExplorer
+          isOpen={showFileExplorer}
+          currentFilePath={filePath}
+          projectDir={projectDir}
+          onFileSelect={loadFile}
+          onClose={closeAllPanels}
+        />
+      )}
 
       {/* Unsaved changes dialog before opening new file */}
       <UnsavedChangesDialog
