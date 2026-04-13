@@ -84,7 +84,7 @@ export function FileExplorer({
             .finally(() => setIsLoading(false));
     }, [isOpen, rootDirectory]);
 
-    // Escape key to close
+    // Escape key and click-outside to close
     useEffect(() => {
         if (!isOpen) return;
 
@@ -95,10 +95,20 @@ export function FileExplorer({
             }
         };
 
+        const handleClickOutside = (e: MouseEvent) => {
+            if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+                onClose();
+            }
+        };
+
         document.addEventListener("keydown", handleKeyDown);
+        document.addEventListener("mousedown", handleClickOutside);
         panelRef.current?.focus();
 
-        return () => document.removeEventListener("keydown", handleKeyDown);
+        return () => {
+            document.removeEventListener("keydown", handleKeyDown);
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
     }, [isOpen, onClose]);
 
     const toggleFolder = useCallback(async (dirPath: string) => {
