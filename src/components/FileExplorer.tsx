@@ -1,9 +1,10 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 interface FileEntry {
     name: string;
     path: string;
+    is_dir: boolean;
 }
 
 interface FileExplorerProps {
@@ -13,35 +14,68 @@ interface FileExplorerProps {
     onClose: () => void;
 }
 
+// Get parent directory from a file path
+function getDirectory(filePath: string | null): string | null {
+    if (!filePath) return null;
+    const normalized = filePath.replace(/\\/g, "/");
+    const lastSlash = normalized.lastIndexOf("/");
+    return lastSlash > 0 ? filePath.substring(0, lastSlash) : null;
+}
+
 export function FileExplorer({
     isOpen,
     currentFilePath,
     onFileSelect,
     onClose,
 }: FileExplorerProps) {
-    const [files, setFiles] = useState<FileEntry[]>([]);
+    const [rootEntries, setRootEntries] = useState<FileEntry[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [expanded, setExpanded] = useState<Record<string, FileEntry[]>>({});
+    const [loadingDirs, setLoadingDirs] = useState<Set<string>>(new Set());
+    // Pinned root directory — set once when explorer opens, stable across file selections
+    const [rootDirectory, setRootDirectory] = useState<string | null>(null);
     const panelRef = useRef<HTMLElement>(null);
 
-    // Get directory from current file path
-    const getDirectory = (filePath: string | null): string | null => {
-        if (!filePath) return null;
-        const normalized = filePath.replace(/\\/g, "/");
-        const lastSlash = normalized.lastIndexOf("/");
-        return lastSlash > 0 ? filePath.substring(0, lastSlash) : null;
-    };
+    const directoryName = rootDirectory
+        ? rootDirectory.replace(/\\/g, "/").split("/").pop()
+        : "Files";
 
+    // Pin root directory when the explorer opens. Only update it when:
+    // 1. The explorer opens for the first time (no root set yet)
+    // 2. A new file is opened from outside the explorer (e.g. via Open dialog),
+    //    which means the file is NOT under the current root.
     useEffect(() => {
-        if (isOpen && currentFilePath) {
-            const directory = getDirectory(currentFilePath);
-            if (directory) {
-                loadFiles(directory);
-            }
+        if (!isOpen || !currentFilePath) return;
+
+        const fileDir = getDirectory(currentFilePath);
+        if (!fileDir) return;
+
+        // If no root yet, or the current file is outside the pinned root, reset root
+        if (!rootDirectory || !currentFilePath.replace(/\\/g, "/").startsWith(rootDirectory.replace(/\\/g, "/"))) {
+            setRootDirectory(fileDir);
         }
     }, [isOpen, currentFilePath]);
 
-    // Escape key to close and focus management
+    // Load root entries when rootDirectory changes
+    useEffect(() => {
+        if (!isOpen || !rootDirectory) return;
+
+        setIsLoading(true);
+        setError(null);
+        invoke<FileEntry[]>("list_directory_files", { directory: rootDirectory })
+            .then((entries) => {
+                setRootEntries(entries);
+                setExpanded({});
+            })
+            .catch((err) => {
+                console.error("Failed to load directory:", err);
+                setError("Failed to load files");
+            })
+            .finally(() => setIsLoading(false));
+    }, [isOpen, rootDirectory]);
+
+    // Escape key to close
     useEffect(() => {
         if (!isOpen) return;
 
@@ -53,38 +87,115 @@ export function FileExplorer({
         };
 
         document.addEventListener("keydown", handleKeyDown);
-
-        // Focus the panel when opened
         panelRef.current?.focus();
 
         return () => document.removeEventListener("keydown", handleKeyDown);
     }, [isOpen, onClose]);
 
-    const loadFiles = async (directory: string) => {
-        setIsLoading(true);
-        setError(null);
+    const toggleFolder = useCallback(async (dirPath: string) => {
+        if (expanded[dirPath]) {
+            setExpanded((prev) => {
+                const next = { ...prev };
+                delete next[dirPath];
+                return next;
+            });
+            return;
+        }
+
+        setLoadingDirs((prev) => new Set(prev).add(dirPath));
         try {
             const entries = await invoke<FileEntry[]>("list_directory_files", {
-                directory,
+                directory: dirPath,
             });
-            setFiles(entries);
+            setExpanded((prev) => ({ ...prev, [dirPath]: entries }));
         } catch (err) {
-            console.error("Failed to load directory:", err);
-            setError("Failed to load files");
+            console.error("Failed to load subdirectory:", err);
         } finally {
-            setIsLoading(false);
+            setLoadingDirs((prev) => {
+                const next = new Set(prev);
+                next.delete(dirPath);
+                return next;
+            });
         }
-    };
+    }, [expanded]);
 
+    // Select file without closing the explorer or changing root
     const handleFileClick = (path: string) => {
         onFileSelect(path);
-        onClose();
     };
 
-    const directory = getDirectory(currentFilePath);
-    const directoryName = directory
-        ? directory.replace(/\\/g, "/").split("/").pop()
-        : "Files";
+    // Recursive renderer for file tree
+    const renderEntries = (entries: FileEntry[], depth: number) => {
+        return entries.map((entry) => {
+            const isActive = entry.path === currentFilePath;
+            const isExpanded = !!expanded[entry.path];
+            const isLoadingDir = loadingDirs.has(entry.path);
+            const paddingLeft = `${1 + depth * 1.25}rem`;
+
+            if (entry.is_dir) {
+                const children = expanded[entry.path];
+                return (
+                    <li key={entry.path} role="treeitem" aria-expanded={isExpanded}>
+                        <button
+                            onClick={() => toggleFolder(entry.path)}
+                            className="btn-press w-full py-1.5 text-left text-sm flex items-center gap-1.5 transition-colors text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+                            style={{ paddingLeft }}
+                        >
+                            <span
+                                className="material-symbols-outlined text-[16px] transition-transform duration-150"
+                                style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)" }}
+                            >
+                                chevron_right
+                            </span>
+                            <span className="material-symbols-outlined text-[16px]">
+                                {isExpanded ? "folder_open" : "folder"}
+                            </span>
+                            <span className="truncate">{entry.name}</span>
+                            {isLoadingDir && (
+                                <span className="ml-auto pr-3 text-[var(--text-muted)] text-xs">...</span>
+                            )}
+                        </button>
+                        {isExpanded && children && (
+                            <ul role="group">
+                                {children.length === 0 ? (
+                                    <li
+                                        className="py-1 text-xs text-[var(--text-muted)] italic"
+                                        style={{ paddingLeft: `${1 + (depth + 1) * 1.25 + 1.5}rem` }}
+                                    >
+                                        Empty
+                                    </li>
+                                ) : (
+                                    renderEntries(children, depth + 1)
+                                )}
+                            </ul>
+                        )}
+                    </li>
+                );
+            }
+
+            return (
+                <li key={entry.path} role="treeitem">
+                    <button
+                        onClick={() => handleFileClick(entry.path)}
+                        aria-selected={isActive}
+                        className={`btn-press w-full py-1.5 text-left text-sm flex items-center gap-1.5 transition-colors ${
+                            isActive
+                                ? "bg-[var(--accent)] text-[var(--accent-text)]"
+                                : "text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+                        }`}
+                        style={{ paddingLeft: `calc(${paddingLeft} + 1.375rem)` }}
+                    >
+                        <span className="material-symbols-outlined text-[16px]">
+                            description
+                        </span>
+                        <span className="truncate">{entry.name}</span>
+                    </button>
+                </li>
+            );
+        });
+    };
+
+    const hasEntries = rootEntries.length > 0;
 
     return (
         <aside
@@ -92,8 +203,9 @@ export function FileExplorer({
             role="navigation"
             aria-label="File explorer"
             tabIndex={-1}
-            className={`fixed left-0 top-12 bottom-7 w-72 bg-[var(--bg-secondary)] border-r border-[var(--border)] z-50 shadow-2xl transition-transform duration-200 ease-out ${isOpen ? "translate-x-0" : "-translate-x-full"
-                }`}
+            className={`fixed left-0 top-12 bottom-7 w-72 bg-[var(--bg-secondary)] border-r border-[var(--border)] z-50 shadow-2xl transition-transform duration-200 ease-out ${
+                isOpen ? "translate-x-0" : "-translate-x-full"
+            }`}
         >
             {/* Header */}
             <div className="h-10 px-4 flex items-center justify-between border-b border-[var(--border)] bg-[var(--bg-titlebar)]">
@@ -124,33 +236,13 @@ export function FileExplorer({
                     <div className="flex items-center justify-center h-32 text-[var(--danger)] text-sm" role="alert">
                         {error}
                     </div>
-                ) : files.length === 0 ? (
+                ) : !hasEntries ? (
                     <div className="flex items-center justify-center h-32 text-[var(--text-secondary)] text-sm">
                         No markdown files
                     </div>
                 ) : (
-                    <ul className="py-2" role="listbox" aria-label="Markdown files">
-                        {files.map((file, index) => {
-                            const isActive = file.path === currentFilePath;
-                            return (
-                                <li key={file.path} className="stagger-item" style={{ animationDelay: `${index * 0.03}s` }}>
-                                    <button
-                                        onClick={() => handleFileClick(file.path)}
-                                        role="option"
-                                        aria-selected={isActive}
-                                        className={`btn-press w-full px-4 py-2 text-left text-sm flex items-center gap-2 transition-colors ${isActive
-                                            ? "bg-[var(--accent)] text-[var(--accent-text)]"
-                                            : "text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
-                                            }`}
-                                    >
-                                        <span className="material-symbols-outlined text-[16px]">
-                                            description
-                                        </span>
-                                        <span className="truncate">{file.name}</span>
-                                    </button>
-                                </li>
-                            );
-                        })}
+                    <ul className="py-1" role="tree" aria-label="File tree">
+                        {renderEntries(rootEntries, 0)}
                     </ul>
                 )}
             </div>

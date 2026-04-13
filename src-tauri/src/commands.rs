@@ -114,53 +114,67 @@ pub struct FileInfo {
 pub struct FileEntry {
     pub name: String,
     pub path: String,
+    pub is_dir: bool,
 }
 
-/// List all markdown files in a directory
+/// List markdown files and subdirectories in a directory
 #[tauri::command]
 pub async fn list_directory_files(directory: String) -> Result<Vec<FileEntry>, CommandError> {
     let dir_path = PathBuf::from(&directory);
-    
+
     if !dir_path.exists() {
         return Err(CommandError::FileNotFound(directory));
     }
-    
+
     if !dir_path.is_dir() {
         return Err(CommandError::ReadError("Path is not a directory".to_string()));
     }
-    
-    let mut entries = Vec::new();
-    
+
+    let mut dirs = Vec::new();
+    let mut files = Vec::new();
+
     let mut read_dir = tokio::fs::read_dir(&dir_path)
         .await
         .map_err(|e| CommandError::ReadError(e.to_string()))?;
-    
+
     while let Some(entry) = read_dir.next_entry().await.map_err(|e| CommandError::ReadError(e.to_string()))? {
         let path = entry.path();
-        
-        // Only include .md files
-        if path.is_file() {
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+
+        // Skip hidden files/directories
+        if name.starts_with('.') {
+            continue;
+        }
+
+        if path.is_dir() {
+            dirs.push(FileEntry {
+                name,
+                path: path.to_string_lossy().to_string(),
+                is_dir: true,
+            });
+        } else if path.is_file() {
             if let Some(ext) = path.extension() {
                 if ext == "md" || ext == "markdown" {
-                    let name = path
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .map(|s| s.to_string())
-                        .unwrap_or_default();
-                    
-                    entries.push(FileEntry {
+                    files.push(FileEntry {
                         name,
                         path: path.to_string_lossy().to_string(),
+                        is_dir: false,
                     });
                 }
             }
         }
     }
-    
-    // Sort alphabetically
-    entries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-    
-    Ok(entries)
+
+    // Sort each group alphabetically, directories first
+    dirs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    files.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    dirs.append(&mut files);
+
+    Ok(dirs)
 }
 
 /// Save image data to a file in the images subdirectory
