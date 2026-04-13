@@ -283,6 +283,61 @@ function generateExportCSS(theme: Theme, font: FontFamily, fontSize: FontSize): 
         .hljs-attr { color: #22c55e; }
         .hljs-literal { color: ${colors.syntaxH1}; }
 
+        /* Highlights */
+        mark {
+            background-color: rgba(255, 213, 79, 0.35);
+            color: inherit;
+            padding: 0.1em 0.2em;
+            border-radius: 0.2em;
+        }
+
+        /* Wikilinks */
+        a.wikilink {
+            border-bottom: 1px dashed ${colors.syntaxLink};
+        }
+
+        /* Callouts */
+        blockquote.callout {
+            border-radius: 0.375rem;
+            background: ${colors.bgSecondary};
+            padding: 0;
+            font-style: normal;
+            color: ${colors.textPrimary};
+            overflow: hidden;
+        }
+
+        .callout-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            font-weight: 600;
+            font-size: 0.95em;
+            background: rgba(128, 128, 128, 0.08);
+        }
+
+        .callout-content {
+            padding: 0.5rem 1rem;
+        }
+
+        .callout-content p:last-child {
+            margin-bottom: 0;
+        }
+
+        .callout-note, .callout-info { border-left-color: #448aff; }
+        .callout-tip, .callout-hint { border-left-color: #00bfa5; }
+        .callout-warning, .callout-caution { border-left-color: #ff9100; }
+        .callout-danger, .callout-error { border-left-color: #ff5252; }
+        .callout-example { border-left-color: #7c4dff; }
+        .callout-success, .callout-todo { border-left-color: #00c853; }
+
+        .callout-note .callout-title, .callout-info .callout-title { color: #448aff; }
+        .callout-tip .callout-title, .callout-hint .callout-title { color: #00bfa5; }
+        .callout-warning .callout-title, .callout-caution .callout-title { color: #ff9100; }
+        .callout-danger .callout-title, .callout-error .callout-title { color: #ff5252; }
+        .callout-example .callout-title { color: #7c4dff; }
+        .callout-success .callout-title, .callout-todo .callout-title { color: #00c853; }
+
         /* Footer */
         .export-footer {
             margin-top: 3rem;

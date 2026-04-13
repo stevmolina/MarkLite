@@ -167,21 +167,45 @@ const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
                 </>
             );
         }
-// Blockquote
+// Blockquote — check for callout syntax first
         if (line.startsWith(">")) {
+            const calloutMatch = line.match(/^>\s*\[!(\w+)\]/);
+            if (calloutMatch) {
+                return <span className="text-[var(--syntax-link)] font-semibold">{line}</span>;
+            }
             return <span className="text-[var(--syntax-quote)] italic">{line}</span>;
+        }
+        // Math blocks $$
+        if (line.startsWith("$$")) {
+            return <span className="text-[var(--syntax-code)]">{line}</span>;
+        }
+        // Comments %%...%%
+        if (line.includes("%%")) {
+            return highlightComments(line);
         }
         // Images ![alt](url) - check before links since images have ! prefix
         if (line.includes("![") && line.includes("](")) {
             return highlightImages(line);
         }
+        // Wikilinks [[page]] - check before regular links
+        if (line.includes("[[")) {
+            return highlightWikilinks(line);
+        }
         // Links [text](url)
         if (line.includes("[") && line.includes("](")) {
             return highlightLinks(line);
         }
+        // Highlights ==text==
+        if (line.includes("==")) {
+            return highlightMarks(line);
+        }
         // Bold **text**
         if (line.includes("**")) {
             return highlightBold(line);
+        }
+        // Inline math $...$
+        if (line.includes("$")) {
+            return highlightInlineMath(line);
         }
         // Regular text
         return <span>{line || "\u00A0"}</span>;
@@ -241,6 +265,115 @@ const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
                 <span key={key++} className="text-[var(--syntax-link)]">
                     [{match[1]}]
                     <span className="text-[var(--syntax-code)]">({match[2]})</span>
+                </span>
+            );
+            lastIndex = match.index + match[0].length;
+        }
+
+        if (lastIndex < text.length) {
+            parts.push(<span key={key++}>{text.slice(lastIndex)}</span>);
+        }
+
+        return parts.length > 0 ? <>{parts}</> : <span>{text}</span>;
+    }
+
+    // Highlight %%comments%%
+    function highlightComments(text: string): React.ReactNode {
+        const parts: React.ReactNode[] = [];
+        const regex = /%%([^%]*)%%/g;
+        let lastIndex = 0;
+        let match;
+        let key = 0;
+
+        while ((match = regex.exec(text)) !== null) {
+            if (match.index > lastIndex) {
+                parts.push(<span key={key++}>{text.slice(lastIndex, match.index)}</span>);
+            }
+            parts.push(
+                <span key={key++} className="text-[var(--text-muted)] italic opacity-50">
+                    {match[0]}
+                </span>
+            );
+            lastIndex = match.index + match[0].length;
+        }
+
+        if (lastIndex < text.length) {
+            parts.push(<span key={key++}>{text.slice(lastIndex)}</span>);
+        }
+
+        return parts.length > 0 ? <>{parts}</> : <span>{text}</span>;
+    }
+
+    // Highlight [[wikilinks]]
+    function highlightWikilinks(text: string): React.ReactNode {
+        const parts: React.ReactNode[] = [];
+        const regex = /\[\[([^\]]+?)(?:\|([^\]]+?))?\]\]/g;
+        let lastIndex = 0;
+        let match;
+        let key = 0;
+
+        while ((match = regex.exec(text)) !== null) {
+            if (match.index > lastIndex) {
+                parts.push(<span key={key++}>{text.slice(lastIndex, match.index)}</span>);
+            }
+            parts.push(
+                <span key={key++} className="text-[var(--syntax-link)]">
+                    {match[0]}
+                </span>
+            );
+            lastIndex = match.index + match[0].length;
+        }
+
+        if (lastIndex < text.length) {
+            parts.push(<span key={key++}>{text.slice(lastIndex)}</span>);
+        }
+
+        return parts.length > 0 ? <>{parts}</> : <span>{text}</span>;
+    }
+
+    // Highlight ==marks==
+    function highlightMarks(text: string): React.ReactNode {
+        const parts: React.ReactNode[] = [];
+        const regex = /==((?:(?!==).)+)==/g;
+        let lastIndex = 0;
+        let match;
+        let key = 0;
+
+        while ((match = regex.exec(text)) !== null) {
+            if (match.index > lastIndex) {
+                parts.push(<span key={key++}>{text.slice(lastIndex, match.index)}</span>);
+            }
+            parts.push(
+                <span key={key++} className="bg-yellow-500/20 text-[var(--syntax-bold)]">
+                    {match[0]}
+                </span>
+            );
+            lastIndex = match.index + match[0].length;
+        }
+
+        if (lastIndex < text.length) {
+            parts.push(<span key={key++}>{text.slice(lastIndex)}</span>);
+        }
+
+        return parts.length > 0 ? <>{parts}</> : <span>{text}</span>;
+    }
+
+    // Highlight inline $math$
+    function highlightInlineMath(text: string): React.ReactNode {
+        const parts: React.ReactNode[] = [];
+        // Match $...$ but not $$...$$
+        const regex = /(?<!\$)\$(?!\$)([^$]+)\$(?!\$)/g;
+        let lastIndex = 0;
+        let match;
+        let key = 0;
+
+        while ((match = regex.exec(text)) !== null) {
+            if (match.index > lastIndex) {
+                parts.push(<span key={key++}>{text.slice(lastIndex, match.index)}</span>);
+            }
+            parts.push(
+                <span key={key++} className="text-[var(--syntax-code)]">
+                    {match[0]}
                 </span>
             );
             lastIndex = match.index + match[0].length;

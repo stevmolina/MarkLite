@@ -1,8 +1,17 @@
 import { useRef, useEffect, useCallback, useMemo, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import remarkFrontmatter from "remark-frontmatter";
 import rehypeHighlight from "rehype-highlight";
+import rehypeKatex from "rehype-katex";
 import { readFile } from "@tauri-apps/plugin-fs";
+import {
+    remarkHighlight,
+    remarkComments,
+    remarkWikilinks,
+    rehypeCallouts,
+} from "../utils/remarkObsidian";
 
 interface MarkdownPreviewProps {
     content: string;
@@ -170,8 +179,19 @@ export function MarkdownPreview({
             <div className="max-w-[800px] mx-auto px-8 py-12">
 <div className="markdown-body" ref={markdownBodyRef}>
                     <Markdown
-                        remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[rehypeHighlight]}
+                        remarkPlugins={[
+                            remarkGfm,
+                            remarkMath,
+                            remarkFrontmatter,
+                            remarkHighlight,
+                            remarkComments,
+                            remarkWikilinks,
+                        ]}
+                        rehypePlugins={[
+                            rehypeHighlight,
+                            rehypeKatex,
+                            rehypeCallouts,
+                        ]}
                         components={components}
                     >
                         {content}

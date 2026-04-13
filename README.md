@@ -75,6 +75,14 @@ Download the latest release from the [Releases](https://github.com/Razee4315/Mar
 - [Bun](https://bun.sh/) (recommended) or npm
 - [Rust](https://www.rust-lang.org/tools/install)
 
+### System Dependencies
+
+Tauri requires platform-specific system libraries to build. Run the setup script to install them automatically (supports Debian/Ubuntu, Fedora, Arch, openSUSE, and macOS):
+
+```bash
+./scripts/install-deps.sh
+```
+
 ### Setup
 
 ```bash
