@@ -15,7 +15,9 @@ import { TableOfContents } from "./components/TableOfContents";
 import { Toast, ToastType } from "./components/Toast";
 import { UnsavedChangesDialog } from "./components/UnsavedChangesDialog";
 import { RecentFilesModal } from "./components/RecentFilesModal";
+import { RecentProjectsModal } from "./components/RecentProjectsModal";
 import { useRecentFiles } from "./hooks/useRecentFiles";
+import { useRecentProjects } from "./hooks/useRecentProjects";
 
 interface FileData {
   path: string;
@@ -60,9 +62,14 @@ function AppContent() {
   // Toast notification state
   const [toast, setToast] = useState<{ message: string; isVisible: boolean; type: ToastType }>({ message: '', isVisible: false, type: 'success' });
 
-  // Recent files
+  // Recent files & projects
   const { recentFiles, addRecent, removeRecent, clearRecent } = useRecentFiles();
+  const { recentProjects, addRecentProject, removeRecentProject, clearRecentProjects } = useRecentProjects();
   const [showRecentFiles, setShowRecentFiles] = useState(false);
+  const [showRecentProjects, setShowRecentProjects] = useState(false);
+
+  // Project directory — drives file explorer root independently of current file
+  const [projectDir, setProjectDir] = useState<string | null>(null);
 
   // Export HTML content ref - captures from visible preview
   const previewRef = useRef<HTMLDivElement>(null);
@@ -309,9 +316,15 @@ function AppContent() {
       // Ctrl+Shift+E - Toggle file explorer (check before Ctrl+E)
       if (e.ctrlKey && e.shiftKey && e.key === "E") {
         e.preventDefault();
-        if (hasFile) {
+        if (hasFile || projectDir) {
           handleToggleFileExplorer();
         }
+        return;
+      }
+      // Ctrl+Shift+P - Recent projects
+      if (e.ctrlKey && e.shiftKey && e.key === "P") {
+        e.preventDefault();
+        setShowRecentProjects((prev) => !prev);
         return;
       }
       // Ctrl+Shift+O - Toggle TOC (check before Ctrl+O)
@@ -351,13 +364,41 @@ function AppContent() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleOpenFile, handleSaveFile, handleToggleMode, handleToggleFileExplorer, handleToggleTOC, hasFile, content]);
+  }, [handleOpenFile, handleSaveFile, handleToggleMode, handleToggleFileExplorer, handleToggleTOC, hasFile, projectDir, content]);
 
   // Handle recent file selection
   const handleRecentSelect = useCallback((path: string) => {
     setShowRecentFiles(false);
     loadFile(path);
   }, [loadFile]);
+
+  // Open folder dialog
+  const handleOpenFolder = useCallback(async () => {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+      });
+
+      if (selected && typeof selected === "string") {
+        setProjectDir(selected);
+        addRecentProject(selected);
+        setShowFileExplorer(true);
+        setShowTOC(false);
+      }
+    } catch (err) {
+      console.error("Failed to open folder dialog:", err);
+    }
+  }, [addRecentProject]);
+
+  // Handle recent project selection
+  const handleProjectSelect = useCallback((path: string) => {
+    setShowRecentProjects(false);
+    setProjectDir(path);
+    addRecentProject(path);
+    setShowFileExplorer(true);
+    setShowTOC(false);
+  }, [addRecentProject]);
 
   // Get export HTML from the visible preview on demand (avoids duplicate rendering)
   const getExportHtml = useCallback((): string => {
@@ -381,9 +422,12 @@ function AppContent() {
       {!hasFile ? (
         <WelcomeScreen
           onOpenFile={handleOpenFile}
+          onOpenFolder={handleOpenFolder}
           onFileDrop={handleFileDrop}
           recentFiles={recentFiles}
           onRecentSelect={handleRecentSelect}
+          recentProjects={recentProjects}
+          onProjectSelect={handleProjectSelect}
         />
       ) : (
         <>
@@ -414,13 +458,7 @@ function AppContent() {
 
           <ModeToggle mode={mode} onToggle={handleToggleMode} />
 
-          {/* Sidebar Panels */}
-          <FileExplorer
-            isOpen={showFileExplorer}
-            currentFilePath={filePath}
-            onFileSelect={loadFile}
-            onClose={closeAllPanels}
-          />
+          {/* Sidebar Panels — TOC only shows with a file */}
           <TableOfContents
             isOpen={showTOC}
             content={content}
@@ -441,12 +479,32 @@ function AppContent() {
         </>
       )}
 
+      {/* File Explorer — available globally (with file or project dir) */}
+      <FileExplorer
+        isOpen={showFileExplorer}
+        currentFilePath={filePath}
+        projectDir={projectDir}
+        onFileSelect={loadFile}
+        onClose={closeAllPanels}
+      />
+
       {/* Unsaved changes dialog before opening new file */}
       <UnsavedChangesDialog
         isOpen={showUnsavedBeforeOpen}
         onClose={handleCancelOpen}
         onDiscard={handleDiscardAndOpen}
         onSave={handleSaveAndOpen}
+      />
+
+      {/* Recent projects modal */}
+      <RecentProjectsModal
+        isOpen={showRecentProjects}
+        recentProjects={recentProjects}
+        onSelect={handleProjectSelect}
+        onRemove={removeRecentProject}
+        onClear={clearRecentProjects}
+        onOpenFolder={handleOpenFolder}
+        onClose={() => setShowRecentProjects(false)}
       />
 
       {/* Recent files modal */}

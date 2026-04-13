@@ -10,6 +10,7 @@ interface FileEntry {
 interface FileExplorerProps {
     isOpen: boolean;
     currentFilePath: string | null;
+    projectDir: string | null;
     onFileSelect: (path: string) => void;
     onClose: () => void;
 }
@@ -25,6 +26,7 @@ function getDirectory(filePath: string | null): string | null {
 export function FileExplorer({
     isOpen,
     currentFilePath,
+    projectDir,
     onFileSelect,
     onClose,
 }: FileExplorerProps) {
@@ -41,21 +43,28 @@ export function FileExplorer({
         ? rootDirectory.replace(/\\/g, "/").split("/").pop()
         : "Files";
 
-    // Pin root directory when the explorer opens. Only update it when:
+    // When an explicit projectDir is set, always use it as root
+    useEffect(() => {
+        if (projectDir) {
+            setRootDirectory(projectDir);
+        }
+    }, [projectDir]);
+
+    // Pin root directory when the explorer opens without a projectDir.
+    // Only update when:
     // 1. The explorer opens for the first time (no root set yet)
     // 2. A new file is opened from outside the explorer (e.g. via Open dialog),
     //    which means the file is NOT under the current root.
     useEffect(() => {
-        if (!isOpen || !currentFilePath) return;
+        if (!isOpen || !currentFilePath || projectDir) return;
 
         const fileDir = getDirectory(currentFilePath);
         if (!fileDir) return;
 
-        // If no root yet, or the current file is outside the pinned root, reset root
         if (!rootDirectory || !currentFilePath.replace(/\\/g, "/").startsWith(rootDirectory.replace(/\\/g, "/"))) {
             setRootDirectory(fileDir);
         }
-    }, [isOpen, currentFilePath]);
+    }, [isOpen, currentFilePath, projectDir]);
 
     // Load root entries when rootDirectory changes
     useEffect(() => {
