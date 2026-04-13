@@ -4,6 +4,7 @@ export interface RecentProject {
   path: string;
   name: string;
   openedAt: number;
+  lastFilePath?: string;
 }
 
 const STORAGE_KEY = "marklite-recent-projects";
@@ -43,8 +44,9 @@ export function useRecentProjects() {
 
   const addRecentProject = useCallback((path: string) => {
     setRecentProjects((prev) => {
+      const existing = prev.find((p) => p.path === path);
       const filtered = prev.filter((p) => p.path !== path);
-      const next = [{ path, name: dirName(path), openedAt: Date.now() }, ...filtered].slice(0, MAX_RECENT);
+      const next = [{ path, name: dirName(path), openedAt: Date.now(), lastFilePath: existing?.lastFilePath }, ...filtered].slice(0, MAX_RECENT);
       saveRecent(next);
       return next;
     });
@@ -58,10 +60,20 @@ export function useRecentProjects() {
     });
   }, []);
 
+  const setProjectLastFile = useCallback((projectPath: string, filePath: string) => {
+    setRecentProjects((prev) => {
+      const next = prev.map((p) =>
+        p.path === projectPath ? { ...p, lastFilePath: filePath } : p
+      );
+      saveRecent(next);
+      return next;
+    });
+  }, []);
+
   const clearRecentProjects = useCallback(() => {
     setRecentProjects([]);
     saveRecent([]);
   }, []);
 
-  return { recentProjects, addRecentProject, removeRecentProject, clearRecentProjects };
+  return { recentProjects, addRecentProject, removeRecentProject, setProjectLastFile, clearRecentProjects };
 }

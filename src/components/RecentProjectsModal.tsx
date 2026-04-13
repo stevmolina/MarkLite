@@ -225,6 +225,11 @@ export function RecentProjectsModal({
                     }`}
                   >
                     {getDisplayPath(project.path)}
+                    {project.lastFilePath && (
+                      <span className="ml-1.5">
+                        — {project.lastFilePath.replace(/\\/g, "/").split("/").pop()}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <span

@@ -65,7 +65,7 @@ function AppContent() {
 
   // Recent files & projects
   const { recentFiles, addRecent, removeRecent, clearRecent } = useRecentFiles();
-  const { recentProjects, addRecentProject, removeRecentProject, clearRecentProjects } = useRecentProjects();
+  const { recentProjects, addRecentProject, removeRecentProject, setProjectLastFile, clearRecentProjects } = useRecentProjects();
   const [showRecentFiles, setShowRecentFiles] = useState(false);
   const [showRecentProjects, setShowRecentProjects] = useState(false);
 
@@ -77,6 +77,10 @@ function AppContent() {
 
   // Shortcut help overlay
   const [showShortcuts, setShowShortcuts] = useState(false);
+
+  // Ref to current projectDir for use in callbacks without dependency churn
+  const projectDirRef = useRef<string | null>(null);
+  projectDirRef.current = projectDir;
 
   // Export HTML content ref - captures from visible preview
   const previewRef = useRef<HTMLDivElement>(null);
@@ -104,13 +108,16 @@ function AppContent() {
       setFileSize(fileData.size);
       setMode("preview");
       addRecent(fileData.path, fileData.name);
+      if (projectDirRef.current) {
+        setProjectLastFile(projectDirRef.current, fileData.path);
+      }
     } catch (err) {
       console.error("Failed to load file:", err);
       showToast("Failed to open file", "error");
     } finally {
       setIsLoading(false);
     }
-  }, [showToast, addRecent]);
+  }, [showToast, addRecent, setProjectLastFile]);
 
   // Load file with unsaved changes protection
   const loadFile = useCallback(async (path: string) => {
@@ -410,11 +417,17 @@ function AppContent() {
         addRecentProject(selected);
         setShowFileExplorer(true);
         setShowTOC(false);
+
+        // Restore last opened file in this project
+        const project = recentProjects.find((p) => p.path === selected);
+        if (project?.lastFilePath) {
+          loadFile(project.lastFilePath);
+        }
       }
     } catch (err) {
       console.error("Failed to open folder dialog:", err);
     }
-  }, [addRecentProject]);
+  }, [addRecentProject, recentProjects, loadFile]);
 
   // Handle recent project selection
   const handleProjectSelect = useCallback((path: string) => {
@@ -423,7 +436,13 @@ function AppContent() {
     addRecentProject(path);
     setShowFileExplorer(true);
     setShowTOC(false);
-  }, [addRecentProject]);
+
+    // Restore last opened file in this project
+    const project = recentProjects.find((p) => p.path === path);
+    if (project?.lastFilePath) {
+      loadFile(project.lastFilePath);
+    }
+  }, [addRecentProject, recentProjects, loadFile]);
 
   // Get export HTML from the visible preview on demand (avoids duplicate rendering)
   const getExportHtml = useCallback((): string => {
