@@ -372,6 +372,7 @@ function AppContent() {
               fileSize={fileSize}
               onEditClick={handleToggleMode}
               onLineChange={(line) => setPreviewLine(line)}
+              onFileOpen={loadFile}
               filePath={filePath}
               markdownBodyRef={previewRef}
             />

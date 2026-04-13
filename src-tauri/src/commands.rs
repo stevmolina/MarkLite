@@ -36,27 +36,27 @@ pub struct FileData {
 #[tauri::command]
 pub async fn read_file(path: String) -> Result<FileData, CommandError> {
     let file_path = PathBuf::from(&path);
-    
+
     if !file_path.exists() {
         return Err(CommandError::FileNotFound(path));
     }
-    
+
     let content = tokio::fs::read_to_string(&file_path)
         .await
         .map_err(|e| CommandError::ReadError(e.to_string()))?;
-    
+
     let metadata = tokio::fs::metadata(&file_path)
         .await
         .map_err(|e| CommandError::ReadError(e.to_string()))?;
-    
+
     let name = file_path
         .file_name()
         .and_then(|n| n.to_str())
         .map(|s| s.to_string())
         .unwrap_or_else(|| "Untitled".to_string());
-    
+
     let line_count = content.lines().count();
-    
+
     Ok(FileData {
         path,
         name,
@@ -72,7 +72,7 @@ pub async fn save_file(path: String, content: String) -> Result<(), CommandError
     tokio::fs::write(&path, &content)
         .await
         .map_err(|e| CommandError::WriteError(e.to_string()))?;
-    
+
     Ok(())
 }
 
@@ -80,21 +80,21 @@ pub async fn save_file(path: String, content: String) -> Result<(), CommandError
 #[tauri::command]
 pub async fn get_file_info(path: String) -> Result<FileInfo, CommandError> {
     let file_path = PathBuf::from(&path);
-    
+
     if !file_path.exists() {
         return Err(CommandError::FileNotFound(path));
     }
-    
+
     let metadata = tokio::fs::metadata(&file_path)
         .await
         .map_err(|e| CommandError::ReadError(e.to_string()))?;
-    
+
     let name = file_path
         .file_name()
         .and_then(|n| n.to_str())
         .map(|s| s.to_string())
         .unwrap_or_else(|| "Untitled".to_string());
-    
+
     Ok(FileInfo {
         path,
         name,
@@ -127,7 +127,9 @@ pub async fn list_directory_files(directory: String) -> Result<Vec<FileEntry>, C
     }
 
     if !dir_path.is_dir() {
-        return Err(CommandError::ReadError("Path is not a directory".to_string()));
+        return Err(CommandError::ReadError(
+            "Path is not a directory".to_string(),
+        ));
     }
 
     let mut dirs = Vec::new();
@@ -137,7 +139,11 @@ pub async fn list_directory_files(directory: String) -> Result<Vec<FileEntry>, C
         .await
         .map_err(|e| CommandError::ReadError(e.to_string()))?;
 
-    while let Some(entry) = read_dir.next_entry().await.map_err(|e| CommandError::ReadError(e.to_string()))? {
+    while let Some(entry) = read_dir
+        .next_entry()
+        .await
+        .map_err(|e| CommandError::ReadError(e.to_string()))?
+    {
         let path = entry.path();
         let name = path
             .file_name()
@@ -186,28 +192,28 @@ pub async fn save_image(
     image_name: String,
 ) -> Result<String, CommandError> {
     let md_path = PathBuf::from(&md_file_path);
-    
+
     // Get the directory containing the markdown file
     let parent_dir = md_path
         .parent()
         .ok_or_else(|| CommandError::WriteError("Cannot determine parent directory".to_string()))?;
-    
+
     // Create images subdirectory
     let images_dir = parent_dir.join("images");
     if !images_dir.exists() {
-        tokio::fs::create_dir_all(&images_dir)
-            .await
-            .map_err(|e| CommandError::WriteError(format!("Failed to create images directory: {}", e)))?;
+        tokio::fs::create_dir_all(&images_dir).await.map_err(|e| {
+            CommandError::WriteError(format!("Failed to create images directory: {}", e))
+        })?;
     }
-    
+
     // Full path for the image
     let image_path = images_dir.join(&image_name);
-    
+
     // Write the image data
     tokio::fs::write(&image_path, &image_data)
         .await
         .map_err(|e| CommandError::WriteError(format!("Failed to write image: {}", e)))?;
-    
+
     // Return relative path for markdown (./images/filename.png)
     Ok(format!("./images/{}", image_name))
 }

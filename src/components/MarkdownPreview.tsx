@@ -5,7 +5,8 @@ import remarkMath from "remark-math";
 import remarkFrontmatter from "remark-frontmatter";
 import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
-import { readFile } from "@tauri-apps/plugin-fs";
+import { readFile, exists } from "@tauri-apps/plugin-fs";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
     remarkHighlight,
     remarkComments,
@@ -20,6 +21,7 @@ interface MarkdownPreviewProps {
     fileSize: number;
     onEditClick: () => void;
     onLineChange?: (line: number) => void;
+    onFileOpen?: (path: string) => void;
     filePath?: string | null;
     markdownBodyRef?: React.RefObject<HTMLDivElement | null>;
 }
@@ -117,6 +119,7 @@ export function MarkdownPreview({
     content,
     lineCount,
     onLineChange,
+    onFileOpen,
     filePath,
     markdownBodyRef,
 }: MarkdownPreviewProps) {
@@ -130,12 +133,79 @@ export function MarkdownPreview({
         return lastSep > 0 ? filePath.slice(0, lastSep) : null;
     }, [filePath]);
 
-    // Custom image component to handle relative paths
+    // Resolve a link target to a local .md file path
+    const resolveLocalLink = useCallback(async (href: string): Promise<string | null> => {
+        if (!baseDir) return null;
+        const sep = baseDir.includes('\\') ? '\\' : '/';
+
+        // Build candidate paths: as-is, with .md appended
+        const cleanHref = href.startsWith('./') ? href.slice(2) : href;
+        const candidates = [cleanHref];
+        if (!cleanHref.match(/\.(md|markdown)$/i)) {
+            candidates.push(`${cleanHref}.md`);
+            candidates.push(`${cleanHref}.markdown`);
+        }
+
+        for (const candidate of candidates) {
+            const fullPath = `${baseDir}${sep}${candidate.replace(/[/\\]/g, sep)}`;
+            try {
+                if (await exists(fullPath)) return fullPath;
+            } catch { /* not found, try next */ }
+        }
+        return null;
+    }, [baseDir]);
+
+    // Handle link clicks
+    const handleLinkClick = useCallback(async (e: React.MouseEvent, href: string) => {
+        e.preventDefault();
+
+        // Anchor links — scroll within current document
+        if (href.startsWith('#')) {
+            const id = href.slice(1);
+            const target = markdownBodyRef?.current?.querySelector(`[id="${CSS.escape(id)}"]`);
+            target?.scrollIntoView({ behavior: 'smooth' });
+            return;
+        }
+
+        // External URLs — open in system browser
+        if (/^https?:\/\//i.test(href)) {
+            try { await openUrl(href); } catch (err) {
+                console.error('Failed to open URL:', err);
+            }
+            return;
+        }
+
+        // Local file links (wikilinks + relative .md links) — open in app
+        if (onFileOpen) {
+            const resolved = await resolveLocalLink(href);
+            if (resolved) {
+                onFileOpen(resolved);
+                return;
+            }
+        }
+
+        // Fallback: try opening as URL in system browser
+        try { await openUrl(href); } catch { /* ignore */ }
+    }, [resolveLocalLink, onFileOpen, markdownBodyRef]);
+
+    // Custom components for react-markdown
     const components = useMemo(() => ({
         img: ({ src, alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => {
             return <LocalImage src={src || ''} alt={alt || 'image'} baseDir={baseDir} {...props} />;
-        }
-    }), [baseDir]);
+        },
+        a: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => {
+            return (
+                <a
+                    {...props}
+                    href={href}
+                    onClick={(e) => href && handleLinkClick(e, href)}
+                    style={{ cursor: 'pointer' }}
+                >
+                    {children}
+                </a>
+            );
+        },
+    }), [baseDir, handleLinkClick]);
 
     // Calculate current line based on scroll position
     const handleScroll = useCallback(() => {
