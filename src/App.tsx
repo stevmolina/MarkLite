@@ -16,6 +16,7 @@ import { Toast, ToastType } from "./components/Toast";
 import { UnsavedChangesDialog } from "./components/UnsavedChangesDialog";
 import { RecentFilesModal } from "./components/RecentFilesModal";
 import { RecentProjectsModal } from "./components/RecentProjectsModal";
+import { ShortcutHelp } from "./components/ShortcutHelp";
 import { useRecentFiles } from "./hooks/useRecentFiles";
 import { useRecentProjects } from "./hooks/useRecentProjects";
 
@@ -73,6 +74,9 @@ function AppContent() {
 
   // Zen mode — hides title bar, status bar, mode toggle, and panels
   const [zenMode, setZenMode] = useState(false);
+
+  // Shortcut help overlay
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   // Export HTML content ref - captures from visible preview
   const previewRef = useRef<HTMLDivElement>(null);
@@ -376,6 +380,11 @@ function AppContent() {
           handleToggleMode();
         }
       }
+      // Ctrl+/ - Toggle shortcut help
+      if (e.ctrlKey && !e.shiftKey && e.key === "/") {
+        e.preventDefault();
+        setShowShortcuts((prev) => !prev);
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -539,6 +548,12 @@ function AppContent() {
         onRemove={removeRecent}
         onClear={clearRecent}
         onClose={() => setShowRecentFiles(false)}
+      />
+
+      {/* Shortcut help */}
+      <ShortcutHelp
+        isOpen={showShortcuts}
+        onClose={() => setShowShortcuts(false)}
       />
 
       {/* Loading overlay */}
