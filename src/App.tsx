@@ -14,6 +14,8 @@ import { FileExplorer } from "./components/FileExplorer";
 import { TableOfContents } from "./components/TableOfContents";
 import { Toast, ToastType } from "./components/Toast";
 import { UnsavedChangesDialog } from "./components/UnsavedChangesDialog";
+import { RecentFilesModal } from "./components/RecentFilesModal";
+import { useRecentFiles } from "./hooks/useRecentFiles";
 
 interface FileData {
   path: string;
@@ -58,6 +60,10 @@ function AppContent() {
   // Toast notification state
   const [toast, setToast] = useState<{ message: string; isVisible: boolean; type: ToastType }>({ message: '', isVisible: false, type: 'success' });
 
+  // Recent files
+  const { recentFiles, addRecent, removeRecent, clearRecent } = useRecentFiles();
+  const [showRecentFiles, setShowRecentFiles] = useState(false);
+
   // Export HTML content ref - captures from visible preview
   const previewRef = useRef<HTMLDivElement>(null);
 
@@ -83,13 +89,14 @@ function AppContent() {
       setOriginalContent(fileData.content);
       setFileSize(fileData.size);
       setMode("preview");
+      addRecent(fileData.path, fileData.name);
     } catch (err) {
       console.error("Failed to load file:", err);
       showToast("Failed to open file", "error");
     } finally {
       setIsLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, addRecent]);
 
   // Load file with unsaved changes protection
   const loadFile = useCallback(async (path: string) => {
@@ -315,6 +322,12 @@ function AppContent() {
         }
         return;
       }
+      // Ctrl+P - Recent files
+      if (e.ctrlKey && !e.shiftKey && e.key === "p") {
+        e.preventDefault();
+        setShowRecentFiles((prev) => !prev);
+        return;
+      }
       // Ctrl+O - Open file (without Shift)
       if (e.ctrlKey && !e.shiftKey && e.key === "o") {
         e.preventDefault();
@@ -340,6 +353,12 @@ function AppContent() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleOpenFile, handleSaveFile, handleToggleMode, handleToggleFileExplorer, handleToggleTOC, hasFile, content]);
 
+  // Handle recent file selection
+  const handleRecentSelect = useCallback((path: string) => {
+    setShowRecentFiles(false);
+    loadFile(path);
+  }, [loadFile]);
+
   // Get export HTML from the visible preview on demand (avoids duplicate rendering)
   const getExportHtml = useCallback((): string => {
     if (previewRef.current) {
@@ -360,7 +379,12 @@ function AppContent() {
       />
 
       {!hasFile ? (
-        <WelcomeScreen onOpenFile={handleOpenFile} onFileDrop={handleFileDrop} />
+        <WelcomeScreen
+          onOpenFile={handleOpenFile}
+          onFileDrop={handleFileDrop}
+          recentFiles={recentFiles}
+          onRecentSelect={handleRecentSelect}
+        />
       ) : (
         <>
           {/* Both views rendered; toggle via display to preserve scroll/state */}
@@ -423,6 +447,16 @@ function AppContent() {
         onClose={handleCancelOpen}
         onDiscard={handleDiscardAndOpen}
         onSave={handleSaveAndOpen}
+      />
+
+      {/* Recent files modal */}
+      <RecentFilesModal
+        isOpen={showRecentFiles}
+        recentFiles={recentFiles}
+        onSelect={handleRecentSelect}
+        onRemove={removeRecent}
+        onClear={clearRecent}
+        onClose={() => setShowRecentFiles(false)}
       />
 
       {/* Loading overlay */}
