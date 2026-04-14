@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTheme, Theme, FontFamily, FontSize } from '../context/ThemeContext';
+import { exportToHTML, exportToPDF } from '../utils/exportUtils';
 
 const themes: { id: Theme; name: string; colors: [string, string]; textColor: string; icon?: string }[] = [
     { id: 'dark', name: 'Dark', colors: ['#0a0a0a', '#141414'], textColor: '#ffffff' },
@@ -22,9 +23,34 @@ const fontSizes: { id: FontSize; name: string; size: string }[] = [
     { id: 'large', name: 'Large', size: '18px' },
 ];
 
-export function SettingsMenu() {
+interface SettingsMenuProps {
+    fileName?: string;
+    getExportHtml?: () => string;
+}
+
+export function SettingsMenu({ fileName, getExportHtml }: SettingsMenuProps = {}) {
     const [isOpen, setIsOpen] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     const { theme, setTheme, font, setFont, fontSize, setFontSize } = useTheme();
+
+    const handleExport = async (format: 'html' | 'pdf') => {
+        if (!fileName || !getExportHtml) return;
+        setIsExporting(true);
+        try {
+            const html = getExportHtml();
+            if (!html) return;
+            const baseName = fileName.replace(/\.(md|markdown)$/i, '');
+            if (format === 'html') {
+                await exportToHTML(html, baseName, theme, font, fontSize);
+            } else {
+                await exportToPDF(html, baseName, theme, font, fontSize);
+            }
+        } catch (err) {
+            console.error('Export failed:', err);
+        } finally {
+            setIsExporting(false);
+        }
+    };
     const menuRef = useRef<HTMLDivElement>(null);
 
     // Close menu when clicking outside
@@ -125,7 +151,7 @@ export function SettingsMenu() {
                     </div>
 
                     {/* Font Size Section */}
-                    <div className="p-4">
+                    <div className="p-4 border-b border-[var(--border)]">
                         <div className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">
                             Font Size
                         </div>
@@ -144,6 +170,33 @@ export function SettingsMenu() {
                             ))}
                         </div>
                     </div>
+
+                    {/* Export Section */}
+                    {fileName && getExportHtml && (
+                        <div className="p-4">
+                            <div className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-3">
+                                Export
+                            </div>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => handleExport('html')}
+                                    disabled={isExporting}
+                                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all disabled:opacity-50"
+                                >
+                                    <span className="material-symbols-outlined text-[16px]">code</span>
+                                    HTML
+                                </button>
+                                <button
+                                    onClick={() => handleExport('pdf')}
+                                    disabled={isExporting}
+                                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all disabled:opacity-50"
+                                >
+                                    <span className="material-symbols-outlined text-[16px]">picture_as_pdf</span>
+                                    PDF
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

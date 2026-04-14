@@ -7,6 +7,7 @@ interface StatusBarProps {
     showTOC?: boolean;
     onToggleFileExplorer?: () => void;
     onToggleTOC?: () => void;
+    onToggleMode?: () => void;
     wordCount?: number;
 }
 
@@ -19,6 +20,7 @@ export function StatusBar({
     showTOC = false,
     onToggleFileExplorer,
     onToggleTOC,
+    onToggleMode,
     wordCount,
 }: StatusBarProps) {
     return (
@@ -82,6 +84,17 @@ export function StatusBar({
                 <div className="hover:text-[var(--text-primary)] cursor-default transition-colors">
                     UTF-8
                 </div>
+                {/* Mode toggle */}
+                <button
+                    onClick={onToggleMode}
+                    title={mode === "preview" ? "Switch to editor (Ctrl+E)" : "Switch to preview (Ctrl+E)"}
+                    className="btn-press flex items-center gap-1 px-1.5 h-5 rounded hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+                >
+                    <span className="material-symbols-outlined text-[14px]">
+                        {mode === "preview" ? "visibility" : "code"}
+                    </span>
+                    <span>{mode === "preview" ? "Preview" : "Editor"}</span>
+                </button>
             </div>
         </footer>
     );

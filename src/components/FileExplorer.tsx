@@ -222,7 +222,7 @@ export function FileExplorer({
             role="navigation"
             aria-label="File explorer"
             tabIndex={-1}
-            className={`fixed left-0 top-12 bottom-7 w-72 bg-[var(--bg-secondary)] border-r border-[var(--border)] z-50 shadow-2xl transition-transform duration-200 ease-out ${
+            className={`fixed left-0 top-10 bottom-7 w-72 bg-[var(--bg-secondary)] border-r border-[var(--border)] z-50 shadow-2xl transition-transform duration-200 ease-out ${
                 isOpen ? "translate-x-0" : "-translate-x-full"
             }`}
         >

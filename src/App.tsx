@@ -4,12 +4,11 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen, TauriEvent } from "@tauri-apps/api/event";
 
 import { ThemeProvider } from "./context/ThemeContext";
-import { TitleBar } from "./components/TitleBar";
+import { TabBar, Tab } from "./components/TabBar";
 import { WelcomeScreen } from "./components/WelcomeScreen";
 import { MarkdownPreview } from "./components/MarkdownPreview";
 import { CodeEditor } from "./components/CodeEditor";
 import { StatusBar } from "./components/StatusBar";
-import { ModeToggle } from "./components/ModeToggle";
 import { FileExplorer } from "./components/FileExplorer";
 import { TableOfContents } from "./components/TableOfContents";
 import { Toast, ToastType } from "./components/Toast";
@@ -26,6 +25,11 @@ interface FileData {
   content: string;
   size: number;
   line_count: number;
+}
+
+interface StartupFileOpenPayload {
+  path: string;
+  zen_mode: boolean;
 }
 
 type ViewMode = "preview" | "code";
@@ -53,8 +57,13 @@ function AppContent() {
   const [pendingFilePath, setPendingFilePath] = useState<string | null>(null);
   const [showUnsavedBeforeOpen, setShowUnsavedBeforeOpen] = useState(false);
 
+  // Tabs state
+  const [tabs, setTabs] = useState<Tab[]>([]);
+
   // Sidebar panel state
   const [showFileExplorer, setShowFileExplorer] = useState(false);
+  const [fileExplorerHover, setFileExplorerHover] = useState(false);
+  const fileExplorerTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showTOC, setShowTOC] = useState(false);
 
   // Preview scroll position
@@ -72,7 +81,7 @@ function AppContent() {
   // Project directory — drives file explorer root independently of current file
   const [projectDir, setProjectDir] = useState<string | null>(null);
 
-  // Zen mode — hides title bar, status bar, mode toggle, and panels
+  // Zen mode — hides all chrome
   const [zenMode, setZenMode] = useState(false);
 
   // Shortcut help overlay
@@ -91,6 +100,31 @@ function AppContent() {
   const hasFile = filePath !== null;
   const wordCount = useMemo(() => getWordCount(content), [content]);
 
+  // Auto-save: debounce 1s after content changes
+  const contentRef = useRef(content);
+  contentRef.current = content;
+  const filePathRef = useRef(filePath);
+  filePathRef.current = filePath;
+  const originalContentRef = useRef(originalContent);
+  originalContentRef.current = originalContent;
+
+  useEffect(() => {
+    if (!filePath || content === originalContent) return;
+
+    const timer = setTimeout(async () => {
+      // Re-check with refs to avoid stale closure
+      if (!filePathRef.current || contentRef.current === originalContentRef.current) return;
+      try {
+        await invoke("save_file", { path: filePathRef.current, content: contentRef.current });
+        setOriginalContent(contentRef.current);
+      } catch (err) {
+        console.error("Auto-save failed:", err);
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [filePath, content, originalContent]);
+
   // Show toast helper
   const showToast = useCallback((message: string, type: ToastType = 'success') => {
     setToast({ message, isVisible: true, type });
@@ -108,6 +142,11 @@ function AppContent() {
       setFileSize(fileData.size);
       setMode("preview");
       addRecent(fileData.path, fileData.name);
+      // Add tab if not already open
+      setTabs((prev) => {
+        if (prev.some((t) => t.path === fileData.path)) return prev;
+        return [...prev, { path: fileData.path, name: fileData.name }];
+      });
       if (projectDirRef.current) {
         setProjectLastFile(projectDirRef.current, fileData.path);
       }
@@ -249,29 +288,38 @@ function AppContent() {
     }
   }, [filePath, content, showToast]);
 
-  // Listen for file open from CLI (when app is opened with a file by double-click)
+  const handleStartupFileOpen = useCallback(async (payload: StartupFileOpenPayload | null) => {
+    if (!payload?.path) return;
+
+    if (payload.zen_mode) {
+      setZenMode(true);
+      setShowFileExplorer(false);
+      setFileExplorerHover(false);
+      setShowTOC(false);
+    }
+
+    await loadFile(payload.path);
+  }, [loadFile]);
+
+  // Pull startup file-open payload after the frontend is mounted.
   useEffect(() => {
     let mounted = true;
-    let unlisten: (() => void) | undefined;
 
-    listen<string>("file-open-from-cli", async (event) => {
-      const filePath = event.payload;
-      if (filePath) {
-        await loadFile(filePath);
+    (async () => {
+      try {
+        const startupPayload = await invoke<StartupFileOpenPayload | null>("take_startup_file_open_payload");
+        if (mounted) {
+          await handleStartupFileOpen(startupPayload);
+        }
+      } catch (err) {
+        console.error("Failed to get startup file payload:", err);
       }
-    }).then((fn) => {
-      if (mounted) {
-        unlisten = fn;
-      } else {
-        fn();
-      }
-    });
+    })();
 
     return () => {
       mounted = false;
-      unlisten?.();
     };
-  }, [loadFile]);
+  }, [handleStartupFileOpen]);
 
   // Toggle mode
   const handleToggleMode = useCallback(() => {
@@ -324,6 +372,45 @@ function AppContent() {
     setToast(prev => ({ ...prev, isVisible: false }));
   }, []);
 
+  // Tab handlers
+  const handleTabSelect = useCallback((path: string) => {
+    loadFile(path);
+  }, [loadFile]);
+
+  const handleTabClose = useCallback((path: string) => {
+    setTabs((prev) => {
+      const next = prev.filter((t) => t.path !== path);
+      // If closing the active tab, switch to adjacent
+      if (path === filePath && next.length > 0) {
+        const closedIndex = prev.findIndex((t) => t.path === path);
+        const newActive = next[Math.min(closedIndex, next.length - 1)];
+        loadFile(newActive.path);
+      } else if (next.length === 0) {
+        // No more tabs — clear file state
+        setFilePath(null);
+        setFileName(null);
+        setContent("");
+        setOriginalContent("");
+      }
+      return next;
+    });
+  }, [filePath, loadFile]);
+
+  // Left sidebar hover handlers
+  const handleSidebarHoverEnter = useCallback(() => {
+    if (fileExplorerTimeout.current) {
+      clearTimeout(fileExplorerTimeout.current);
+      fileExplorerTimeout.current = null;
+    }
+    setFileExplorerHover(true);
+  }, []);
+
+  const handleSidebarHoverLeave = useCallback(() => {
+    fileExplorerTimeout.current = setTimeout(() => {
+      setFileExplorerHover(false);
+    }, 300);
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -332,8 +419,8 @@ function AppContent() {
         e.preventDefault();
         setZenMode((prev) => {
           if (!prev) {
-            // Entering zen mode — close panels
             setShowFileExplorer(false);
+            setFileExplorerHover(false);
             setShowTOC(false);
           }
           return !prev;
@@ -455,11 +542,13 @@ function AppContent() {
   return (
     <div className="h-screen flex flex-col bg-[var(--bg-primary)] overflow-hidden transition-colors">
       {!zenMode && (
-        <TitleBar
-          fileName={fileName ?? undefined}
+        <TabBar
+          tabs={tabs}
+          activeTabPath={filePath}
           isDirty={isDirty}
-          filePath={filePath ?? undefined}
-          onOpenFile={handleOpenFile}
+          onTabSelect={handleTabSelect}
+          onTabClose={handleTabClose}
+          onNewTab={handleOpenFile}
           onSaveFile={handleSaveFile}
           getExportHtml={getExportHtml}
         />
@@ -502,8 +591,6 @@ function AppContent() {
             />
           </div>
 
-          {!zenMode && <ModeToggle mode={mode} onToggle={handleToggleMode} />}
-
           {/* Sidebar Panels — TOC only shows with a file */}
           {!zenMode && (
             <TableOfContents
@@ -519,25 +606,43 @@ function AppContent() {
               lineNumber={mode === "preview" ? previewLine : cursorPosition.line}
               columnNumber={cursorPosition.col}
               mode={mode}
-              showFileExplorer={showFileExplorer}
+              showFileExplorer={showFileExplorer || fileExplorerHover}
               showTOC={showTOC}
               onToggleFileExplorer={handleToggleFileExplorer}
               onToggleTOC={handleToggleTOC}
+              onToggleMode={handleToggleMode}
               wordCount={wordCount}
             />
           )}
         </>
       )}
 
+      {/* Left edge hover zone — reveals file explorer on hover */}
+      {!zenMode && !showFileExplorer && (hasFile || projectDir) && (
+        <div
+          className="fixed left-0 top-10 bottom-7 w-2 z-40"
+          onMouseEnter={handleSidebarHoverEnter}
+        />
+      )}
+
       {/* File Explorer — available globally (with file or project dir) */}
       {!zenMode && (
-        <FileExplorer
-          isOpen={showFileExplorer}
-          currentFilePath={filePath}
-          projectDir={projectDir}
-          onFileSelect={loadFile}
-          onClose={closeAllPanels}
-        />
+        <div
+          onMouseEnter={handleSidebarHoverEnter}
+          onMouseLeave={handleSidebarHoverLeave}
+        >
+          <FileExplorer
+            isOpen={showFileExplorer || fileExplorerHover}
+            currentFilePath={filePath}
+            projectDir={projectDir}
+            onFileSelect={loadFile}
+            onClose={() => {
+              setShowFileExplorer(false);
+              setFileExplorerHover(false);
+              setShowTOC(false);
+            }}
+          />
+        </div>
       )}
 
       {/* Unsaved changes dialog before opening new file */}
