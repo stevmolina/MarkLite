@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useMemo, useState } from "react";
+import { useRef, useEffect, useCallback, useMemo, useState, isValidElement, type ReactNode, type HTMLAttributes, type ImgHTMLAttributes, type AnchorHTMLAttributes } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -13,6 +13,7 @@ import {
     remarkWikilinks,
     rehypeCallouts,
 } from "../utils/remarkObsidian";
+import { MermaidDiagram } from "./MermaidDiagram";
 
 interface MarkdownPreviewProps {
     content: string;
@@ -38,7 +39,7 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
 };
 
 // Component to handle local image loading
-function LocalImage({ src, alt, baseDir, ...props }: { src: string; alt: string; baseDir: string | null } & React.ImgHTMLAttributes<HTMLImageElement>) {
+function LocalImage({ src, alt, baseDir, ...props }: { src: string; alt: string; baseDir: string | null } & ImgHTMLAttributes<HTMLImageElement>) {
     const [imageSrc, setImageSrc] = useState<string>('');
     const [error, setError] = useState(false);
 
@@ -190,10 +191,30 @@ export function MarkdownPreview({
 
     // Custom components for react-markdown
     const components = useMemo(() => ({
-        img: ({ src, alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => {
+        pre: ({ children }: HTMLAttributes<HTMLPreElement>) => {
+            if (isValidElement<{ className?: string }>(children) && children.props.className?.includes('language-mermaid')) {
+                return <>{children}</>;
+            }
+
+            return <pre>{children}</pre>;
+        },
+        code: ({ className, children, ...props }: HTMLAttributes<HTMLElement> & { children?: ReactNode }) => {
+            const language = className?.match(/language-([\w-]+)/)?.[1]?.toLowerCase();
+
+            if (language === 'mermaid') {
+                return <MermaidDiagram code={String(children || '').replace(/\n$/, '')} />;
+            }
+
+            return (
+                <code {...props} className={className}>
+                    {children}
+                </code>
+            );
+        },
+        img: ({ src, alt, ...props }: ImgHTMLAttributes<HTMLImageElement>) => {
             return <LocalImage src={src || ''} alt={alt || 'image'} baseDir={baseDir} {...props} />;
         },
-        a: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => {
+        a: ({ href, children, ...props }: AnchorHTMLAttributes<HTMLAnchorElement>) => {
             return (
                 <a
                     {...props}
