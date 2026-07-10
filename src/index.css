@@ -28,6 +28,7 @@
   --code-bg: #141414;
   --code-text: #a3a3a3;
   --blockquote-bg: rgba(20, 20, 20, 0.8);
+  --blockquote-text: #d4d4d4;
 
   --syntax-h1: #ffffff;
   --syntax-h2: #e5e5e5;
@@ -75,6 +76,7 @@
   --code-bg: #f5f5f5;
   --code-text: #dc2626;
   --blockquote-bg: rgba(250, 250, 250, 0.8);
+  --blockquote-text: #525252;
 
   --syntax-h1: #171717;
   --syntax-h2: #262626;
@@ -122,6 +124,7 @@
   --code-bg: #ebe5d8;
   --code-text: #8b5a2b;
   --blockquote-bg: rgba(235, 229, 216, 0.6);
+  --blockquote-text: #6b6352;
 
   --syntax-h1: #3d3029;
   --syntax-h2: #5c4033;
@@ -169,6 +172,7 @@
   --code-bg: rgba(175, 184, 193, 0.2);
   --code-text: #1f2328;
   --blockquote-bg: transparent;
+  --blockquote-text: #656d76;
 
   --syntax-h1: #1f2328;
   --syntax-h2: #1f2328;
@@ -627,7 +631,7 @@ body {
   padding: 0.5rem 1rem;
   margin: 1rem 0;
   font-style: italic;
-  color: var(--text-secondary);
+  color: var(--blockquote-text);
   border-radius: 0 0.25rem 0.25rem 0;
 }
 
